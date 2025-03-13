@@ -52,13 +52,14 @@ h1 {
 }
 
 .leaderboard-table th, .leaderboard-table td {
-    border: 1px solid white;
+    border: 1px solid rgb(143, 143, 143);
     text-align: center;
     padding: 12px;
+    
 }
 
 .leaderboard-table th {
-    background-color: #333;
+    background-color: #dbd6d6;
 }
 
 .leaderboard-table tr:hover {
