@@ -71,6 +71,7 @@ const Leaderboard = () => {
                 <thead>
                     <tr>
                         <th>Rank</th>
+                        <th>Register No</th>
                         <th>Name</th>
                         <th>Department</th>
                         <th>Year</th>
@@ -78,14 +79,15 @@ const Leaderboard = () => {
                     </tr>
                 </thead>
                 <tbody>
-                    {filteredStudents.map((s, index) => (
-                        <tr key={s.regNo}>
-                            <td>{index + 1}</td>
-                            <td>{s.name}</td>
-                            <td>{s.department}</td>
-                            <td>{s.year}</td>
-                            <td>{s.totalSolved}</td>
-                        </tr>
+                {filteredStudents.map((s, index) => (
+            <tr key={index}>
+                <td>{index + 1}</td>  {/* RANK FIXED */}
+                <td>{s.regNo || "N/A"}</td>  {/* REGISTER NO FIXED */}
+                <td>{s.name}</td>
+                <td>{s.department}</td>
+                <td>{s.year}</td>
+                <td>{s.totalSolved}</td>
+            </tr>
                     ))}
                 </tbody>
             </Table>
