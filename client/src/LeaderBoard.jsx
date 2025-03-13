@@ -16,10 +16,21 @@ const Leaderboard = () => {
         regNo: "", name: "", department: "", year: "", leetcodeUrl: "",
     });
 
+    const API_BASE = "http://localhost:3000";
+
     const fetchStudents = async () => {
-        const res = await fetch("http://localhost:3000/students");
-        const data = await res.json();
-        setStudents(data);
+        try {
+            const res = await fetch(`${API_BASE}/students`);
+            if (!res.ok) {
+                const errorText = await res.text();
+                console.error("Error fetching students:", errorText);
+                return;
+            }
+            const data = await res.json();
+            setStudents(data);
+        } catch (error) {
+            console.error("Fetch Error:", error);
+        }
     };
 
     useEffect(() => {
@@ -31,15 +42,24 @@ const Leaderboard = () => {
         return () => clearInterval(interval); // Cleanup on unmount
     }, []);
 
-    const handleSubmit = async (e) => {
+     const handleSubmit = async (e) => {
         e.preventDefault();
-        await fetch("http://localhost:3000/add-student", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(newStudent),
-        });
-        fetchStudents();
-        setShowModal(false);
+        try {
+            const response = await fetch(`${API_BASE}/add-student`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(newStudent),
+            });
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error("Error adding student:", errorText);
+                return;
+            }
+            fetchStudents();
+            setShowModal(false);
+        } catch (error) {
+            console.error("Submission Error:", error);
+        }
     };
 
     const filteredStudents = students.filter((s) =>
@@ -79,17 +99,24 @@ const Leaderboard = () => {
                     </tr>
                 </thead>
                 <tbody>
-                {filteredStudents.map((s, index) => (
+    {filteredStudents.length > 0 ? (
+        filteredStudents.map((s, index) => (
             <tr key={index}>
-                <td>{index + 1}</td>  {/* RANK FIXED */}
-                <td>{s.regNo || "N/A"}</td>  {/* REGISTER NO FIXED */}
+                <td>{index + 1}</td>
+                <td>{s.regNo || "N/A"}</td>
                 <td>{s.name}</td>
                 <td>{s.department}</td>
                 <td>{s.year}</td>
                 <td>{s.totalSolved}</td>
             </tr>
-                    ))}
-                </tbody>
+        ))
+    ) : (
+        <tr>
+            <td colSpan="6" className="text-center">No students found</td>
+        </tr>
+    )}
+</tbody>
+
             </Table>
 
             <Modal show={showModal} onHide={() => setShowModal(false)}>

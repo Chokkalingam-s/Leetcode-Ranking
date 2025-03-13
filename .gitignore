@@ -9,3 +9,4 @@ server/.env
 # Ignore build files
 client/build/
 server/dist/
+

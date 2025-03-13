@@ -60,7 +60,30 @@ const fetchLeetCodeStats = async (username) => {
         return null;
     }
 };
+app.post("/add-student", async (req, res) => {
+    const { regNo, name, department, year, leetcodeUrl } = req.body;
+    const username = leetcodeUrl.split("/u/")[1].replace("/", "");
 
+    try {
+        // Fetch LeetCode stats
+        const response = await axios.post("https://leetcode.com/graphql", graphqlQuery(username), {
+            headers: { "Content-Type": "application/json" },
+        });
+
+        const userData = response.data.data.matchedUser;
+        if (!userData) return res.status(404).json({ error: "Invalid LeetCode profile" });
+
+        const totalSolved = userData.submitStatsGlobal.acSubmissionNum[0].count;
+
+        const students = readData();
+        students.push({ regNo, name, department, year, leetcodeUrl, totalSolved });
+        writeData(students);
+
+        res.json({ message: "Student added successfully", totalSolved });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch LeetCode data" });
+    }
+});
 // Function to update LeetCode problem counts
 const updateLeetCodeCounts = async () => {
     let students = readData();
@@ -73,6 +96,7 @@ const updateLeetCodeCounts = async () => {
         
         // Inside the updateLeetCodeCounts function:
         const username = extractUsername(student.leetcodeUrl);
+        
         const newCount = await fetchLeetCodeStats(username);
 
         if (newCount !== null) {
