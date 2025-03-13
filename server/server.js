@@ -1,57 +1,57 @@
 const express = require("express");
-const fs = require("fs");
-const axios = require("axios");
 const cors = require("cors");
+const axios = require("axios");
+const { Sequelize, DataTypes } = require("sequelize");
 
 const app = express();
 const PORT = 3000;
-const DATA_FILE = "data.json";
 
+// Setup Sequelize with MySQL
+const sequelize = new Sequelize("leetcode_ranking", "root", "mysql", {
+    host: "localhost",
+    dialect: "mysql",
+    logging: false, // Disable logging
+});
+
+// Define Student Model
+const Student = sequelize.define("Student", {
+    regNo: { type: DataTypes.STRING, primaryKey: true },
+    name: { type: DataTypes.STRING, allowNull: false },
+    department: { type: DataTypes.STRING, allowNull: false },
+    year: { type: DataTypes.STRING, allowNull: false },
+    leetcodeUrl: { type: DataTypes.STRING, allowNull: false },
+    totalSolved: { type: DataTypes.INTEGER, defaultValue: 0 },
+});
+
+// Sync Database
+sequelize.sync().then(() => console.log("✅ Database Synced"));
+
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-// GraphQL query to fetch LeetCode problem count
-const graphqlQuery = (username) => ({
-    query: `
-        query getUserProfile($username: String!) {
-            matchedUser(username: $username) {
-                username
-                submitStatsGlobal {
-                    acSubmissionNum {
-                        count
-                    }
-                }
-            }
-        }
-    `,
-    variables: { username },
-});
+// Function to extract username from LeetCode URL
+const extractUsername = (url) => url.replace(/\/+$/, "").split("/").pop();
 
-// Function to read stored student data
-const readData = () => {
-    if (!fs.existsSync(DATA_FILE)) return [];
-    return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-};
-
-// Function to write updated student data
-const writeData = (data) => {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-};
-
-// Function to fetch LeetCode problem count (With Debugging)
+// Function to fetch LeetCode problem count
 const fetchLeetCodeStats = async (username) => {
     try {
-        const response = await axios.post(
-            `https://leetcode.com/graphql?t=${Date.now()}`, // Bypass cache
-            graphqlQuery(username),
-            { headers: { "Content-Type": "application/json" } }
-        );
+        const response = await axios.post("https://leetcode.com/graphql", {
+            query: `
+                query getUserProfile($username: String!) {
+                    matchedUser(username: $username) {
+                        submitStatsGlobal {
+                            acSubmissionNum {
+                                count
+                            }
+                        }
+                    }
+                }
+            `,
+            variables: { username },
+        }, { headers: { "Content-Type": "application/json" } });
 
         const userData = response.data.data.matchedUser;
-
-        // Debug: Log the full response
-        console.log(`📢 API Response for ${username}:`, JSON.stringify(userData, null, 2));
-
         if (!userData) return null;
 
         return userData.submitStatsGlobal.acSubmissionNum[0].count;
@@ -60,76 +60,75 @@ const fetchLeetCodeStats = async (username) => {
         return null;
     }
 };
+
+// API to Add Student
 app.post("/add-student", async (req, res) => {
     const { regNo, name, department, year, leetcodeUrl } = req.body;
-    const username = leetcodeUrl.split("/u/")[1].replace("/", "");
+    const username = extractUsername(leetcodeUrl);
 
     try {
-        // Fetch LeetCode stats
-        const response = await axios.post("https://leetcode.com/graphql", graphqlQuery(username), {
-            headers: { "Content-Type": "application/json" },
-        });
+        const totalSolved = await fetchLeetCodeStats(username);
+        if (totalSolved === null) return res.status(400).json({ error: "Invalid LeetCode profile" });
 
-        const userData = response.data.data.matchedUser;
-        if (!userData) return res.status(404).json({ error: "Invalid LeetCode profile" });
-
-        const totalSolved = userData.submitStatsGlobal.acSubmissionNum[0].count;
-
-        const students = readData();
-        students.push({ regNo, name, department, year, leetcodeUrl, totalSolved });
-        writeData(students);
-
-        res.json({ message: "Student added successfully", totalSolved });
+        const student = await Student.create({ regNo, name, department, year, leetcodeUrl, totalSolved });
+        res.json({ message: "✅ Student added successfully", student });
     } catch (error) {
-        res.status(500).json({ error: "Failed to fetch LeetCode data" });
+        res.status(500).json({ error: "⚠️ Failed to add student" });
     }
 });
+
+// API to Get All Students (Sorted by Problem Solved)
+app.get("/students", async (req, res) => {
+    const students = await Student.findAll({ order: [["totalSolved", "DESC"]] });
+    res.json(students);
+});
+
+// Function to update LeetCode counts at 12 AM, 8 AM, 8 PM
+const scheduleUpdates = () => {
+    const updateTimes = ["00:00", "08:00", "20:00"];
+
+    updateTimes.forEach((time) => {
+        const [hours, minutes] = time.split(":").map(Number);
+        const now = new Date();
+        const nextUpdate = new Date();
+
+        nextUpdate.setHours(hours, minutes, 0, 0);
+        if (nextUpdate < now) nextUpdate.setDate(nextUpdate.getDate() + 1);
+
+        const delay = nextUpdate - now;
+        setTimeout(() => {
+            updateLeetCodeCounts();
+            setInterval(updateLeetCodeCounts, 8 * 60 * 60 * 1000); // Repeat every 8 hours
+        }, delay);
+
+        console.log(`⏳ Next update scheduled at ${nextUpdate.toLocaleString()}`);
+    });
+};
+
 // Function to update LeetCode problem counts
 const updateLeetCodeCounts = async () => {
-    let students = readData();
+    console.log("🔄 Updating LeetCode stats...");
+
+    const students = await Student.findAll();
     let updated = false;
 
     for (let student of students) {
-        const extractUsername = (url) => {
-            return url.replace(/\/+$/, "").split("/").pop(); // Extracts last part of the URL correctly
-        };
-        
-        // Inside the updateLeetCodeCounts function:
         const username = extractUsername(student.leetcodeUrl);
-        
         const newCount = await fetchLeetCodeStats(username);
 
-        if (newCount !== null) {
-            console.log(`🔍 Checking ${student.name}: Stored=${student.totalSolved}, New=${newCount}`);
-        }
-
         if (newCount !== null && newCount !== student.totalSolved) {
-            console.log(`🔄 Updating ${student.name} from ${student.totalSolved} → ${newCount}`);
+            console.log(`🔄 Updating ${student.name}: ${student.totalSolved} → ${newCount}`);
             student.totalSolved = newCount;
+            await student.save();
             updated = true;
         }
     }
 
-    if (updated) {
-        console.log("✅ Writing new data to data.json...");
-        writeData(students);
-        console.log("✅ LeetCode problem counts updated!");
-    } else {
-        console.log("ℹ️ No changes detected in LeetCode problem counts.");
-    }
+    console.log(updated ? "✅ Update complete!" : "ℹ️ No changes detected.");
 };
 
-// API: Get students (Forces update before sending data)
-app.get("/students", async (req, res) => {
-    await updateLeetCodeCounts(); // Ensure latest data
-    const students = readData().sort((a, b) => b.totalSolved - a.totalSolved);
-    res.json(students);
-});
-
-// Run background update every 15 seconds
-setInterval(updateLeetCodeCounts, 15000);
-
+// Start Server
 app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
-    updateLeetCodeCounts(); // Initial update on startup
+    scheduleUpdates(); // Start scheduled updates
 });
