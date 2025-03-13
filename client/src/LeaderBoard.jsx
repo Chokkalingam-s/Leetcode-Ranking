@@ -71,6 +71,8 @@ const Leaderboard = () => {
 
     return (
         <Container fluid className="leaderboard-container">
+            <h1 className="text-white text-center mb-4">R.M.K. Engineering College</h1>
+            <h1 className="text-white text-center mb-4">Department of Information Technology</h1>
             <h1 className="text-white text-center mb-4">LeetCode Leaderboard</h1>
             <div className="d-flex justify-content-between align-items-center mb-3">
                 <Button variant="warning" onClick={() => setShowModal(true)} className="add-btn">Add Student</Button>
